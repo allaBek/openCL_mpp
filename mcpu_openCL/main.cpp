@@ -11,7 +11,7 @@ using namespace std;
 #include <CL/cl.h>
 #endif
 
-#define VECTOR_SIZE 735*504*2 //width*height*number_of_images
+#define VECTOR_SIZE 735*504 //width*height*number_of_images
 
 
 
@@ -84,11 +84,12 @@ void acquireImage(unsigned &width, unsigned &height, vector<unsigned char> &img1
 
 
 }
-void saveImage(float* &img)
+void saveImage(float* &img, float* &img2)
 {
 	unsigned w = 735, h = 504;
 	const char* fileName1 = ".\\images\\out_im1.png";
 	const char* fileName2 = ".\\images\\out_im2.png";
+
 	vector<unsigned char> output_img1, output_img2;
 	for (int i = 0;  i< VECTOR_SIZE; i++ )
 	{
@@ -137,30 +138,30 @@ int main(void) {
 	readKernel(kernel_string);
 
 	//create memory allocations for RGB vectors of the image, I used float for better accuracy  --This can be optimized in next phase
-	float alpha = 2.0;
+	
+	//img1
 	float *R = (float*)malloc(sizeof(float)*VECTOR_SIZE);
 	float *G = (float*)malloc(sizeof(float)*VECTOR_SIZE);
 	float *B = (float*)malloc(sizeof(float)*VECTOR_SIZE);
 	float *gray = (float*)malloc(sizeof(float)*VECTOR_SIZE); //result gray image
+	//img2
+	float *R_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE);
+	float *G_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE);
+	float *B_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE);
+	float *gray_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE);
 	//Copy RGB vectors of both images into a concatenated vector, that is [IMG1,IMG2]
 	for (int i = 0; i < VECTOR_SIZE; i++)
 	{
 		//Copy first image RGB elements
-		if(i < VECTOR_SIZE/2)
-		{
 		R[i] = (float) R_1[i];
 		G[i] = (float) G_1[i];
 		B[i] = (float) B_1[i];
-		}
-		//Copy second image RGB elements
-		else
-		{
-			int j = i % (VECTOR_SIZE / 2);
-			R[i] = (float)R_2[j];
-			G[i] = (float)G_2[j];
-			B[i] = (float)B_2[j];
-		}
+		//copy second image
+		R_img2[i] = (float)R_1[i];
+		G_img2[i] = (float)G_1[i];
+		B_img2[i] = (float)B_1[i];
 		gray[i] = 0;
+		gray_img2[i] = 0;
 	}
 
 	////////////////////////////////////////////////////////////////////openCL specific functions/////////////////////////////////////////////////
@@ -188,11 +189,15 @@ int main(void) {
 	// Create a command queue
 	cl_command_queue command_queue = clCreateCommandQueue(context, device_list[0], 0, &clStatus);
 
-	// Create memory buffers on the device for each vector
+	/////////////gray_kerel
+	// Create memory buffers on the device for each vector RGB and the output vector gray
 	cl_mem R_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 	cl_mem G_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 	cl_mem B_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 	cl_mem gray_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	/////////////zncc_kerel
+	// Create memory buffers on the device for each vector RGB and the output vector gray
+
 
 	// Copy the Buffer A and B to the device
 	clStatus = clEnqueueWriteBuffer(command_queue, R_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), R, 0, NULL, NULL);
