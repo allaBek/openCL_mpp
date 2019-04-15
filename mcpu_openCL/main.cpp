@@ -66,7 +66,7 @@ void downSample(vector <unsigned char> &image, vector <unsigned char> &R, vector
 			}
 			R.push_back(image[i]);
 			G.push_back(image[i + 1]);
-			B.push_back(image[i+2]);
+			B.push_back(image[i + 2]);
 		}
 	}
 }
@@ -84,45 +84,29 @@ void acquireImage(unsigned &width, unsigned &height, vector<unsigned char> &img1
 
 
 }
-void saveImage(float* &img, float* &img2)
+void saveImage(float* &img, string name)
 {
 	unsigned w = 735, h = 504;
-	const char* fileName1 = ".\\images\\out_im1.png";
-	const char* fileName2 = ".\\images\\out_im2.png";
-
+	string path = ".\\images\\";
+	string fileName1 = path + name + ".png";
 	vector<unsigned char> output_img1, output_img2;
-	for (int i = 0;  i< VECTOR_SIZE; i++ )
+	for (int i = 0; i < VECTOR_SIZE; i++)
 	{
-		if(i < VECTOR_SIZE / 2)
-		{
-		for (int k = 0; k < 3; k++)
-		{
-			//int m = (int) img[i];
-			output_img1.push_back((unsigned char)img[i]);
-		}
-		output_img1.push_back(255);
-		}
-		else
-		{
 			for (int k = 0; k < 3; k++)
 			{
-				//int m = (int) img[i];
-				output_img2.push_back((unsigned char)img[i]);
+				output_img1.push_back((unsigned char)img[i]);
 			}
-			output_img2.push_back(255);
-
-		}
+			output_img1.push_back(255);
 	}
 
-
 	int error = lodepng::encode(fileName1, output_img1, w, h);
-	error = lodepng::encode(fileName2, output_img2, w, h);
-
+	if(error !=0)
+		printf("error %s: %d \n", name, error);
 
 }
 
 int main(void) {
-	
+
 	//Read images into vectors
 	vector<unsigned char> img1;
 	vector<unsigned char> img2;
@@ -137,41 +121,21 @@ int main(void) {
 	char *kernel_string;
 	readKernel(kernel_string);
 
-	//create memory allocations for RGB vectors of the image, I used float for better accuracy  --This can be optimized in next phase
-	
-	//img1
-	float *R = (float*)malloc(sizeof(float)*VECTOR_SIZE);
-	float *G = (float*)malloc(sizeof(float)*VECTOR_SIZE);
-	float *B = (float*)malloc(sizeof(float)*VECTOR_SIZE);
-	float *gray = (float*)malloc(sizeof(float)*VECTOR_SIZE); //result gray image
-	//img2
-	float *R_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE);
-	float *G_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE);
-	float *B_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE);
-	float *gray_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE);
-	//Copy RGB vectors of both images into a concatenated vector, that is [IMG1,IMG2]
-	for (int i = 0; i < VECTOR_SIZE; i++)
-	{
-		//Copy first image RGB elements
-		R[i] = (float) R_1[i];
-		G[i] = (float) G_1[i];
-		B[i] = (float) B_1[i];
-		//copy second image
-		R_img2[i] = (float)R_1[i];
-		G_img2[i] = (float)G_1[i];
-		B_img2[i] = (float)B_1[i];
-		gray[i] = 0;
-		gray_img2[i] = 0;
-	}
+	//Create gray images vectors that will store results for image1 and image2, float used for keeping accuracy in intermediate results
+	float *gray_img1 = (float*)malloc(sizeof(float)*VECTOR_SIZE); //result gray image
+	float *gray_img2 = (float*)malloc(sizeof(float)*VECTOR_SIZE); //result gray image
+	//create disparity map vectors
+	float *disp1 = (float*)malloc(sizeof(float)*VECTOR_SIZE); 
+	float *disp2 = (float*)malloc(sizeof(float)*VECTOR_SIZE); 
 
+	
 	////////////////////////////////////////////////////////////////////openCL specific functions/////////////////////////////////////////////////
 	// Get platform and device information
 	cl_platform_id * platforms = NULL;
 	cl_uint     num_platforms;
 	//Set up the Platform
 	cl_int clStatus = clGetPlatformIDs(0, NULL, &num_platforms);
-	platforms = (cl_platform_id *)
-	malloc(sizeof(cl_platform_id)*num_platforms);
+	platforms = (cl_platform_id *) malloc(sizeof(cl_platform_id)*num_platforms);
 	clStatus = clGetPlatformIDs(num_platforms, platforms, NULL);
 
 	//Get the devices list and choose the device you want to run on
@@ -179,7 +143,7 @@ int main(void) {
 	cl_uint           num_devices;
 
 	clStatus = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, 0, NULL, &num_devices);
-	device_list = (cl_device_id *) malloc(sizeof(cl_device_id)*num_devices);
+	device_list = (cl_device_id *)malloc(sizeof(cl_device_id)*num_devices);
 	clStatus = clGetDeviceIDs(platforms[0], CL_DEVICE_TYPE_GPU, num_devices, device_list, NULL);
 
 	// Create one OpenCL context for each device in the platform
@@ -190,86 +154,163 @@ int main(void) {
 	cl_command_queue command_queue = clCreateCommandQueue(context, device_list[0], 0, &clStatus);
 
 	/////////////gray_kerel
-	// Create memory buffers on the device for each vector RGB and the output vector gray
-	cl_mem R_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
-	cl_mem G_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
-	cl_mem B_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
-	cl_mem gray_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	// Create memory buffers on the device for each vector RGB and the output vector gray for img1
+	cl_mem R1_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(unsigned char), NULL, &clStatus);
+	cl_mem G1_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(unsigned char), NULL, &clStatus);
+	cl_mem B1_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(unsigned char), NULL, &clStatus);
+	cl_mem gray_img1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	// Create memory buffers on the device for each vector RGB and the output vector gray for img2
+	cl_mem R2_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(unsigned char), NULL, &clStatus);
+	cl_mem G2_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(unsigned char), NULL, &clStatus);
+	cl_mem B2_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, VECTOR_SIZE * sizeof(unsigned char), NULL, &clStatus);
+	cl_mem gray_img2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+
+	/////////////mean_kerel
+	cl_mem mean1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	cl_mem mean2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+
+
 	/////////////zncc_kerel
-	// Create memory buffers on the device for each vector RGB and the output vector gray
+	// Create memory buffers for disparity1, disparity2
+	cl_mem disp1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	cl_mem disp2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 
 
-	// Copy the Buffer A and B to the device
-	clStatus = clEnqueueWriteBuffer(command_queue, R_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), R, 0, NULL, NULL);
-	clStatus = clEnqueueWriteBuffer(command_queue, G_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), G, 0, NULL, NULL);
-	clStatus = clEnqueueWriteBuffer(command_queue, B_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), B, 0, NULL, NULL);
 
-	// Create a program from the kernel source
+	//////////// Copy buffers to the device memory
+	////gray buffers
+	//img1
+	clStatus = clEnqueueWriteBuffer(command_queue, R1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &R_1[0], 0, NULL, NULL);
+	clStatus = clEnqueueWriteBuffer(command_queue, G1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &G_1[0], 0, NULL, NULL);
+	clStatus = clEnqueueWriteBuffer(command_queue, B1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &B_1[0], 0, NULL, NULL);
+	//img2
+	clStatus = clEnqueueWriteBuffer(command_queue, R2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &R_2[0], 0, NULL, NULL);
+	clStatus = clEnqueueWriteBuffer(command_queue, G2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &G_2[0], 0, NULL, NULL);
+	clStatus = clEnqueueWriteBuffer(command_queue, B2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &B_2[0], 0, NULL, NULL);
+	////mean buffers 
+	//none at the moment since gray is already in device memory
+
+	////ZNCC buffers 
+	//none at the moment since gray is already in device memory
+	
+
+
+
+	/////////// Create a program from the kernel source
 	cl_program program = clCreateProgramWithSource(context, 1, (const char **)&kernel_string, NULL, &clStatus);
 
-	// Build the program
+	/////////// Build the program
 	clStatus = clBuildProgram(program, 1, device_list, NULL, NULL, NULL);
+	if (clStatus != 0)
+	{
+		return clStatus;
+	}
 
-	// Create the OpenCL kernel for function gray
-	cl_kernel gray_kernel = clCreateKernel(program, "gray", &clStatus);
+	/////////// Create the OpenCL kernel for function gray img1 and img2
+	cl_kernel gray1_kernel = clCreateKernel(program, "gray", &clStatus);
+	cl_kernel gray2_kernel = clCreateKernel(program, "gray", &clStatus);
 	
-	// Create the OpenCL kernel for function zncc
+	/////////// Create the OpenCL kernel for function mean
+	cl_kernel mean_kernel = clCreateKernel(program, "mean", &clStatus);
+
+	/////////// Create the OpenCL kernel for function zncc
 	cl_kernel zncc_kernel = clCreateKernel(program, "zncc", &clStatus);
 
-	// Set the arguments of the kernel for gray
-	clStatus = clSetKernelArg(gray_kernel, 0, sizeof(cl_mem), (void *)&R_clmem);
-	clStatus = clSetKernelArg(gray_kernel, 1, sizeof(cl_mem), (void *)&G_clmem);
-	clStatus = clSetKernelArg(gray_kernel, 2, sizeof(cl_mem), (void *)&B_clmem);
-	clStatus = clSetKernelArg(gray_kernel, 3, sizeof(cl_mem), (void *)&gray_clmem);
-	//set the arguments of the kernel for zncc
-	clStatus = clSetKernelArg(zncc_kernel, 0, sizeof(cl_mem), (void *)&gray_clmem);
+	/////////// Set the arguments of the kernel for gray
+	//img1
+	clStatus = clSetKernelArg(gray1_kernel, 0, sizeof(cl_mem), (void *)&R1_clmem);
+	clStatus = clSetKernelArg(gray1_kernel, 1, sizeof(cl_mem), (void *)&G1_clmem);
+	clStatus = clSetKernelArg(gray1_kernel, 2, sizeof(cl_mem), (void *)&B1_clmem);
+	clStatus = clSetKernelArg(gray1_kernel, 3, sizeof(cl_mem), (void *)&gray_img1_clmem);
+	//img2
+	clStatus = clSetKernelArg(gray2_kernel, 0, sizeof(cl_mem), (void *)&R2_clmem);
+	clStatus = clSetKernelArg(gray2_kernel, 1, sizeof(cl_mem), (void *)&G2_clmem);
+	clStatus = clSetKernelArg(gray2_kernel, 2, sizeof(cl_mem), (void *)&B2_clmem);
+	clStatus = clSetKernelArg(gray2_kernel, 3, sizeof(cl_mem), (void *)&gray_img2_clmem);
+
+	///////////set the arguments of the kernel for zncc
+	clStatus = clSetKernelArg(mean_kernel, 0, sizeof(cl_mem), (void *)&gray_img1_clmem);
+	clStatus = clSetKernelArg(mean_kernel, 1, sizeof(cl_mem), (void *)&gray_img2_clmem);
+	clStatus = clSetKernelArg(mean_kernel, 2, sizeof(cl_mem), (void *)&mean1_clmem);
+	clStatus = clSetKernelArg(mean_kernel, 3, sizeof(cl_mem), (void *)&mean2_clmem);
 
 
-	//start timer beginning
-	auto start = chrono::high_resolution_clock::now();
+	///////////set the arguments of the kernel for zncc
+	clStatus = clSetKernelArg(zncc_kernel, 0, sizeof(cl_mem), (void *)&gray_img1_clmem);
+	clStatus = clSetKernelArg(zncc_kernel, 1, sizeof(cl_mem), (void *)&gray_img2_clmem);
+	clStatus = clSetKernelArg(zncc_kernel, 2, sizeof(cl_mem), (void *)&mean1_clmem);
+	clStatus = clSetKernelArg(zncc_kernel, 3, sizeof(cl_mem), (void *)&mean2_clmem);
+	clStatus = clSetKernelArg(zncc_kernel, 4, sizeof(cl_mem), (void *)&disp1_clmem);
+	clStatus = clSetKernelArg(zncc_kernel, 5, sizeof(cl_mem), (void *)&disp2_clmem);
 
 
-	//define local and global sizes
+	///////////////////////////////////////////////////////start timer beginning///////////////////////////////////////////////////////
+	auto start = chrono::high_resolution_clock::now();/////////////////////////////////////////////////////////////////////////////////
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	///////////define local and global sizes
 	size_t global_size = VECTOR_SIZE; // Process the entire lists
 	size_t local_size = 8;           // Process one item at a time
 
-	
-	//put the gray kernel into the command queue
-	clStatus = clEnqueueNDRangeKernel(command_queue, gray_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
-	//put the zncc kernel into the command queue
+
+	///////////put the gray kernel into the command queue
+	//img1
+	clStatus = clEnqueueNDRangeKernel(command_queue, gray1_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+	//img2
+	clStatus = clEnqueueNDRangeKernel(command_queue, gray2_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+
+	///////////put the zncc kernel into the command queue
+	clStatus = clEnqueueNDRangeKernel(command_queue, mean_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+
+	///////////put the zncc kernel into the command queue
 	clStatus = clEnqueueNDRangeKernel(command_queue, zncc_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
 
-	// Read the cl memory C_clmem on device to the host variable C
-	clStatus = clEnqueueReadBuffer(command_queue, gray_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), gray, 0, NULL, NULL);
+	/////////Read memory from device to local host memory
+	// Read gray images from the device into the local host memory
+	clStatus = clEnqueueReadBuffer(command_queue, gray_img1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), gray_img1, 0, NULL, NULL);
+	clStatus = clEnqueueReadBuffer(command_queue, gray_img2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), gray_img2, 0, NULL, NULL);
 
-	// Clean up and wait for all the comands to complete.
+	//Read mean vectors from device to local memory
+	clStatus = clEnqueueReadBuffer(command_queue, disp1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), disp1, 0, NULL, NULL);
+	clStatus = clEnqueueReadBuffer(command_queue, disp2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), disp2, 0, NULL, NULL);
+
+	/*
+	//Read disparity vectors from device to local memory
+	clStatus = clEnqueueReadBuffer(command_queue, disp1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), disp1, 0, NULL, NULL);
+	clStatus = clEnqueueReadBuffer(command_queue, disp2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), disp2, 0, NULL, NULL);
+	*/
+
+	/////////// Clean up and wait for all the comands to complete.
 	clStatus = clFlush(command_queue);
 	clStatus = clFinish(command_queue);
 
-	//
+	///////////////////////////////////////////////////////Stop timer and save image //////////////////////////////////////////////
 	auto finish = chrono::high_resolution_clock::now();
 	chrono::duration<double> elapsed = finish - start;
-	printf("%f", elapsed);
-	saveImage(gray);
-	system("pause");
+	printf("%f \n", elapsed);
+	saveImage(gray_img1, "gray1");
+	saveImage(gray_img2, "gray2");
+	saveImage(disp1, "disp1");
+	saveImage(disp2, "disp2");
 
+	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// Finally release all OpenCL allocated objects and host buffers.
-	clStatus = clReleaseKernel(gray_kernel);
+	clStatus = clReleaseKernel(gray1_kernel);
+	clStatus = clReleaseKernel(gray2_kernel);
 	clStatus = clReleaseProgram(program);
-	clStatus = clReleaseMemObject(R_clmem);
-	clStatus = clReleaseMemObject(G_clmem);
-	clStatus = clReleaseMemObject(B_clmem);
-	clStatus = clReleaseMemObject(gray_clmem);
+	clStatus = clReleaseMemObject(R1_clmem);
+	clStatus = clReleaseMemObject(G1_clmem);
+	clStatus = clReleaseMemObject(B1_clmem);
+	clStatus = clReleaseMemObject(gray_img1_clmem);
 	clStatus = clReleaseCommandQueue(command_queue);
 	clStatus = clReleaseContext(context);
+
 	
-	free(R);
-	free(G);
-	free(B);
-	free(gray);
+	free(gray_img1);
 	free(platforms);
 	free(device_list);
 
 	return 0;
 }
+
