@@ -127,6 +127,7 @@ int main(void) {
 	//create disparity map vectors
 	float *disp1 = (float*)malloc(sizeof(float)*VECTOR_SIZE); 
 	float *disp2 = (float*)malloc(sizeof(float)*VECTOR_SIZE); 
+	float *occlusion = (float*)malloc(sizeof(float)*VECTOR_SIZE);
 
 	
 	////////////////////////////////////////////////////////////////////openCL specific functions/////////////////////////////////////////////////
@@ -171,10 +172,17 @@ int main(void) {
 
 
 	/////////////zncc_kerel
-	// Create memory buffers for disparity1, disparity2
+	// Create memory buffers for disparity1, disparity2, delta_dsip
 	cl_mem disp1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 	cl_mem disp2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	
+	/////////////cross_checking_kerel
+	// Create memory buffers for cross_checking
+	cl_mem delta_disp_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 
+	/////////////occlusion_kerel
+	// Create memory buffers for occlusion
+	cl_mem occlusion_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 
 
 	//////////// Copy buffers to the device memory
@@ -191,8 +199,13 @@ int main(void) {
 	//none at the moment since gray is already in device memory
 
 	////ZNCC buffers 
-	//none at the moment since gray is already in device memory
+	//none at the moment since gray and mean are already in device memory
 	
+	////cross_checking buffers 
+	//none at the moment since disp is already in device memory
+
+	////occlusion buffers 
+	//none at the moment since delta_disp is already in device memory
 
 
 
@@ -216,6 +229,12 @@ int main(void) {
 	/////////// Create the OpenCL kernel for function zncc
 	cl_kernel zncc_kernel = clCreateKernel(program, "zncc", &clStatus);
 
+	/////////// Create the OpenCL kernel for function cross_checking
+	cl_kernel cross_checking_kernel = clCreateKernel(program, "cross_checking", &clStatus);
+
+	/////////// Create the OpenCL kernel for function occlusion
+	cl_kernel occlusion_kernel = clCreateKernel(program, "occlusion_fillig", &clStatus);
+
 	/////////// Set the arguments of the kernel for gray
 	//img1
 	clStatus = clSetKernelArg(gray1_kernel, 0, sizeof(cl_mem), (void *)&R1_clmem);
@@ -228,7 +247,7 @@ int main(void) {
 	clStatus = clSetKernelArg(gray2_kernel, 2, sizeof(cl_mem), (void *)&B2_clmem);
 	clStatus = clSetKernelArg(gray2_kernel, 3, sizeof(cl_mem), (void *)&gray_img2_clmem);
 
-	///////////set the arguments of the kernel for zncc
+	///////////set the arguments of the kernel for mean
 	clStatus = clSetKernelArg(mean_kernel, 0, sizeof(cl_mem), (void *)&gray_img1_clmem);
 	clStatus = clSetKernelArg(mean_kernel, 1, sizeof(cl_mem), (void *)&gray_img2_clmem);
 	clStatus = clSetKernelArg(mean_kernel, 2, sizeof(cl_mem), (void *)&mean1_clmem);
@@ -242,6 +261,15 @@ int main(void) {
 	clStatus = clSetKernelArg(zncc_kernel, 3, sizeof(cl_mem), (void *)&mean2_clmem);
 	clStatus = clSetKernelArg(zncc_kernel, 4, sizeof(cl_mem), (void *)&disp1_clmem);
 	clStatus = clSetKernelArg(zncc_kernel, 5, sizeof(cl_mem), (void *)&disp2_clmem);
+
+	///////////set the arguments of the kernel for cross_checking
+	clStatus = clSetKernelArg(cross_checking_kernel, 0, sizeof(cl_mem), (void *)&disp1_clmem);
+	clStatus = clSetKernelArg(cross_checking_kernel, 1, sizeof(cl_mem), (void *)&disp2_clmem);
+	clStatus = clSetKernelArg(cross_checking_kernel, 2, sizeof(cl_mem), (void *)&delta_disp_clmem);
+	
+	///////////set the arguments of the kernel for occlusion
+	clStatus = clSetKernelArg(occlusion_kernel, 0, sizeof(cl_mem), (void *)&delta_disp_clmem);
+	clStatus = clSetKernelArg(occlusion_kernel, 1, sizeof(cl_mem), (void *)&occlusion_clmem);
 
 
 	///////////////////////////////////////////////////////start timer beginning///////////////////////////////////////////////////////
@@ -265,21 +293,20 @@ int main(void) {
 	///////////put the zncc kernel into the command queue
 	clStatus = clEnqueueNDRangeKernel(command_queue, zncc_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
 
+	///////////put the zncc kernel into the command queue
+	clStatus = clEnqueueNDRangeKernel(command_queue, cross_checking_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+
+	///////////put the zncc kernel into the command queue
+	clStatus = clEnqueueNDRangeKernel(command_queue, occlusion_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+
 	/////////Read memory from device to local host memory
-	// Read gray images from the device into the local host memory
-	clStatus = clEnqueueReadBuffer(command_queue, gray_img1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), gray_img1, 0, NULL, NULL);
-	clStatus = clEnqueueReadBuffer(command_queue, gray_img2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), gray_img2, 0, NULL, NULL);
 
 	//Read mean vectors from device to local memory
 	clStatus = clEnqueueReadBuffer(command_queue, disp1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), disp1, 0, NULL, NULL);
 	clStatus = clEnqueueReadBuffer(command_queue, disp2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), disp2, 0, NULL, NULL);
+	clStatus = clEnqueueReadBuffer(command_queue, occlusion_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), occlusion, 0, NULL, NULL);
 
-	/*
-	//Read disparity vectors from device to local memory
-	clStatus = clEnqueueReadBuffer(command_queue, disp1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), disp1, 0, NULL, NULL);
-	clStatus = clEnqueueReadBuffer(command_queue, disp2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(float), disp2, 0, NULL, NULL);
-	*/
-
+	
 	/////////// Clean up and wait for all the comands to complete.
 	clStatus = clFlush(command_queue);
 	clStatus = clFinish(command_queue);
@@ -290,6 +317,7 @@ int main(void) {
 	printf("%f \n", elapsed);
 	saveImage(disp1, "disp1");
 	saveImage(disp2, "disp2");
+	saveImage(occlusion, "occlusion");
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 

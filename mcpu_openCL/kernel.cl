@@ -50,6 +50,9 @@ int index = get_global_id(0);
 
 }
 
+
+
+
 __kernel void zncc(__global float * gray1,__global float * gray2, __global float * mean1, __global float * mean2, __global float * disp1, __global float * disp2) 
 {
 //Get the index of the work-item
@@ -66,6 +69,7 @@ int index = get_global_id(0);
 	
 	//initialiaz zncc
 	float zncc1 = -10, zncc2 = -10;
+	int d1 = 0, d2 =0;
 	for(int d = 0; d < MAX_DISP; d++)
 	{
 		float map1_sum1 = 0,map1_sum2 = 0,map1_sum3 = 0,map2_sum1 = 0,map2_sum2 = 0,map2_sum3 = 0;
@@ -132,6 +136,7 @@ int index = get_global_id(0);
 		if(tmp1 >= zncc1)
 		{
 			disp1[index] = d*255/65;
+			d1 = d;
 			zncc1 = tmp1;
 		}
 		
@@ -139,10 +144,82 @@ int index = get_global_id(0);
 		{
 			disp2[index] = d*255/65;
 			zncc2 = tmp2;
+			d2 = d;
 		}
 		
 	}
-};
+	//choose disparity value
+		
+
+	
+}
+
+
+__kernel void cross_checking( __global float * disp1, __global float * disp2,__global float * delta_disp) 
+{
+	int index = get_global_id(0);
+	const int DIFF = 38;
+	
+	float delta  = fabs(disp1[index] - disp2[index]);
+	if(delta < DIFF)
+	{
+		delta_disp[index] = max(disp1[index],disp2[index]);
+	}
+	else
+	{
+		delta_disp[index] = 0;
+	}
+	
+}
+
+
+__kernel void occlusion_fillig(__global float * delta_disp, __global float * occlusion) 
+{
+	int index = get_global_id(0);
+	const int HEIGHT = 504, WIDTH = 735;
+
+	//locate the current pixel by finding its row&col
+	const int position_within_row = index % 735;
+	const int current_row = (index - position_within_row) / WIDTH;
+	float x = delta_disp[index];
+	if(x != 0 )
+	{
+	occlusion[index] = delta_disp[index];
+	}
+	else
+	{
+		bool b = 0;
+		for(int k = 1; b == 0 ; k++)
+		{
+			
+			int i = k + index;
+			int j = index - k;
+			if(j > WIDTH * (current_row))
+			{
+			float y = delta_disp[j];
+			if(y !=0)
+			{
+				occlusion[index] = y;
+				b = 1;
+			}				
+			}
+			else if( i < WIDTH * (current_row + 1))
+			{
+			float y = delta_disp[i];
+			if(y !=0)
+			{
+				occlusion[index] = y;
+				b = 1;
+			}
+			}
+				
+		}
+	}
+	
+}
+
+
+;
 
 
 
