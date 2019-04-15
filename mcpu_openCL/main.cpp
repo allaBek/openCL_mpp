@@ -47,7 +47,7 @@ void readImages(unsigned char* &img1, unsigned char* &img2, unsigned &width, uns
 	const char* fileName2 = ".\\images\\im1.png";
 	unsigned error;
 	error = lodepng_decode32_file(&img1, &width, &height, fileName1);
-	error = lodepng_decode32_file(&img2, &width, &height, fileName1);
+	error = lodepng_decode32_file(&img2, &width, &height, fileName2);
 
 
 }
@@ -288,8 +288,6 @@ int main(void) {
 	auto finish = chrono::high_resolution_clock::now();
 	chrono::duration<double> elapsed = finish - start;
 	printf("%f \n", elapsed);
-	saveImage(gray_img1, "gray1");
-	saveImage(gray_img2, "gray2");
 	saveImage(disp1, "disp1");
 	saveImage(disp2, "disp2");
 

@@ -77,14 +77,15 @@ int index = get_global_id(0);
 				//get the current pixel to be processed
 				const int current_pixel = y * WIDTH + position_within_row;
 				//
-				for (int x = current_pixel - (B - 1) / 2 -d; x <= (current_pixel + (B - 1) / 2 -d) && x < WIDTH*(y + 1); x++)
+				for (int x = current_pixel - (B - 1) / 2 ; x <= (current_pixel + (B - 1) / 2) && x < WIDTH*(y + 1); x++)
 				{
-					if (x >= y * WIDTH)
+					int x_d = x -d;
+					if (x >= y * WIDTH && x_d  >= y * WIDTH)
 					{
 						//calculate the ZNCC sums
-					map1_sum1 = map1_sum1 + (gray1[index] - mean1[index])*(gray2[x] - mean2[x]);
-					map1_sum2 = map1_sum2 + (gray1[index] - mean1[index])*(gray1[index] - mean1[index]);
-					map1_sum3 = map1_sum3 + (gray2[x] - mean2[x])*(gray2[x] - mean2[x]);
+					map1_sum1 = map1_sum1 + (gray1[x] - mean1[x])*(gray2[x_d] - mean2[x_d]);
+					map1_sum2 = map1_sum2 + (gray1[x] - mean1[x])*(gray1[x] - mean1[x]);
+					map1_sum3 = map1_sum3 + (gray2[x_d] - mean2[x_d])*(gray2[x_d] - mean2[x_d]);
 					
 					} //if x is positive		
 				}// for loop of x
@@ -101,14 +102,15 @@ int index = get_global_id(0);
 				//get the current pixel to be processed
 				const int current_pixel = y * WIDTH + position_within_row;
 				//
-				for (int x = current_pixel - (B - 1) / 2 +d; x <= (current_pixel + (B - 1) / 2 +d) && x < WIDTH*(y + 1); x++)
+				for (int x = current_pixel - (B - 1) / 2; x <= (current_pixel + (B - 1) / 2) && x < WIDTH*(y + 1); x++)
 				{
-					if (x >= y * WIDTH)
+					int x_d = x +d;
+					if (x >= y * WIDTH && x_d  < (y+1) * WIDTH)
 					{
 						//calculate the ZNCC sums
-					map2_sum1 = map2_sum1 + (gray2[index] - mean2[index])*(gray1[x] - mean1[x]);
-					map2_sum2 = map2_sum2 + (gray2[index] - mean2[index])*(gray2[index] - mean2[index]);
-					map2_sum3 = map2_sum3 + (gray1[x] - mean1[x])*(gray1[x] - mean1[x]);	
+					map2_sum1 = map2_sum1 + (gray2[x] - mean2[x])*(gray1[x_d] - mean1[x_d]);
+					map2_sum2 = map2_sum2 + (gray2[x] - mean2[x])*(gray2[x] - mean2[x]);
+					map2_sum3 = map2_sum3 + (gray1[x_d] - mean1[x_d])*(gray1[x_d] - mean1[x_d]);	
 					
 					} //if x is positive		
 				}// for loop of x
