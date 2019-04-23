@@ -216,7 +216,7 @@ __kernel void downsample_and_gray(__global unsigned char * image, __global float
 	
 	const int red_position_within_row = index% (WIDTH * 4);
 	const int current_row = (index - red_position_within_row) / (WIDTH*4);
-	if(current_row%4 ==0 && red_position_within_row % 16 == 0)
+	if((current_row & 3) ==0 && (red_position_within_row & 15) == 0)
 	{
 		gray[GRAY_WIDTH*current_row/4 + red_position_within_row/16] = (unsigned char) (0.2126*image[index] + 0.7152*image[index+1] + 0.0722*image[index+2]);
 	}
@@ -339,13 +339,13 @@ int index = get_global_id(0);
 		} //for loop of y
 		
 		//sqrt
-		map1_sum2 = sqrt(map1_sum2);
-		map1_sum3 = sqrt(map1_sum3);
-		map2_sum2 = sqrt(map2_sum2);
-		map2_sum3 = sqrt(map2_sum3);
+		map1_sum2 = rsqrt(map1_sum2);
+		map1_sum3 = rsqrt(map1_sum3);
+		map2_sum2 = rsqrt(map2_sum2);
+		map2_sum3 = rsqrt(map2_sum3);
 		//calculate zncc
-		double tmp1 = map1_sum1 / (map1_sum2 * map1_sum3);
-		double tmp2 = map2_sum1 / (map2_sum2 * map2_sum3);
+		double tmp1 = map1_sum1 * (map1_sum2 * map1_sum3);
+		double tmp2 = map2_sum1 * (map2_sum2 * map2_sum3);
 		
 		//pick disparity value in here
 		if(tmp1 >= zncc1)

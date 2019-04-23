@@ -1,14 +1,19 @@
-#include <stdio.h>
+//#include <stdio.h>
 #include <stdlib.h>
 #include "lodepng.h"
 #include <chrono>
 #include <vector>
+#include <iostream>
+#include <fstream>
+
 using namespace std;
+
+
 
 #ifdef __APPLE__
 #include <OpenCL/cl.h>
 #else
-#include <CL/cl.h>
+#include <CL/cl.hpp>
 #endif
 
 #define VECTOR_SIZE 735*504 //width*height*number_of_images
@@ -389,7 +394,7 @@ int main(void) {
 
 //Read kernel from file
 int readKernel(char* &kernel_source)
-{
+{/*
 	FILE *fp;
 	size_t source_size, program_size;
 
@@ -405,7 +410,7 @@ int readKernel(char* &kernel_source)
 	kernel_source = (char*)malloc(program_size + 1);
 	kernel_source[program_size] = '\0';
 	fread(kernel_source, sizeof(char), program_size, fp);
-	fclose(fp);
+	fclose(fp);*/
 	return 0;
 }
 
@@ -422,36 +427,16 @@ void readImages(unsigned char* &img1, unsigned char* &img2, unsigned &width, uns
 
 
 }
-void downSample(vector <unsigned char> &image, vector <unsigned char> &R, vector <unsigned char> &G, vector <unsigned char> &B)
-{
-	//downsampling images by a factor of 1/16
-	int j = 0;
-	int k = 0;
-	for (int j = 0; j < 2016; j += 4)
-	{
-		for (int i = 11760 * j; i < image.size(); i = i + 16)
-		{
-			if (i == 11760 * (j + 1))
-			{
-				break;
-			}
-			R.push_back(image[i]);
-			G.push_back(image[i + 1]);
-			B.push_back(image[i + 2]);
-		}
-	}
-}
+
 
 void acquireImage(unsigned &width, unsigned &height, vector<unsigned char> &img1, vector<unsigned char> &img2)
 {
-	printf("Loading images \n");
 	const char* fileName1 = ".\\images\\im0.png";
 	const char* fileName2 = ".\\images\\im1.png";
 	//the raw pixels
 	//decode
 	lodepng::decode(img1, width, height, fileName1);
 	lodepng::decode(img2, width, height, fileName2);
-	printf("%d \n", width);
 
 
 }
@@ -476,17 +461,63 @@ void saveImage(float* &img, string name)
 
 }
 
+
+void getAvailableDevicesInfo()
+{
+	// Gettings all available platforms
+	vector<cl::Platform> platforms;
+	cl::Platform::get(&platforms);
+
+	_ASSERT(platforms.size() > 0);
+
+	vector <cl::Device> devices;
+
+	for (auto platform : platforms)
+	{
+		// Get all platform devices 
+		platform.getDevices(CL_DEVICE_TYPE_ALL, &devices);
+
+		cout << "* Platform name: ";
+		cout << platform.getInfo<CL_PLATFORM_NAME>() << endl;
+		cout << "CL version:" << platform.getInfo<CL_PLATFORM_VERSION>() << endl;
+
+		_ASSERT(devices.size() > 0);
+
+		cout << "Platform devices:" << endl;
+		for (auto device : devices)
+		{
+			cout << "Device name: " << device.getInfo<CL_DEVICE_NAME>() << endl;
+			cout << "Device vendor: " << device.getInfo<CL_DEVICE_VENDOR>() << endl;
+			cout << "Device local memory type: " << device.getInfo<CL_DEVICE_LOCAL_MEM_TYPE>() << endl;
+			cout << "Device local memory size: " << device.getInfo<CL_DEVICE_LOCAL_MEM_SIZE>() << endl;
+			cout << "Device max frequency: " << device.getInfo<CL_DEVICE_MAX_CLOCK_FREQUENCY>() << endl;
+			cout << "Device max constant buffer size: " << device.getInfo<CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE>() << endl;
+			cout << "Device max work group size: " << device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>() << endl;
+			cout << "Device max work item size: " << device.getInfo<CL_DEVICE_MAX_WORK_ITEM_SIZES>()[0] << endl;
+			cout << endl;
+		}
+		cout << endl;
+	}
+
+}
+
 int main(void) {
+
+	//get devices information
+	//getAvailableDevicesInfo();
 
 	//Read images into vectors
 	vector<unsigned char> img1;
 	vector<unsigned char> img2;
 	unsigned w, h;
+	cout << "Reading images ...." << endl;
 	acquireImage(w, h, img1, img2);
 	//resize the input using linear execution --This could be optimized later in the next phase
 	//load kernel into  a string
-	char *kernel_string;
-	readKernel(kernel_string);
+	const char *kernel_string;
+	ifstream kernel_file("kernel.cl");
+	string src(istreambuf_iterator<char>(kernel_file), (istreambuf_iterator<char>()));
+	kernel_string = src.c_str();
 
 	//Create gray images vectors that will store results for image1 and image2, float used for keeping accuracy in intermediate results
 	float *gray_img1 = (float*)malloc(sizeof(float)*VECTOR_SIZE); //result gray image
@@ -517,18 +548,21 @@ int main(void) {
 	// Create one OpenCL context for each device in the platform
 	cl_context context;
 	context = clCreateContext(NULL, num_devices, device_list, NULL, NULL, &clStatus);
-
-	// Create a command queue
-	cl_command_queue command_queue = clCreateCommandQueue(context, device_list[0], 0, &clStatus);
 	
+	// Create a command queue
+	
+	cl_command_queue command_queue = clCreateCommandQueue(context, device_list[0], 0, &clStatus);
+	char name[50];
+	clGetDeviceInfo(device_list[0], CL_DEVICE_NAME, size(name), name, NULL);
+	cout << "Device name: " << name << endl;
 	/////////////dowsample_gray_kerel
 	// Create memory buffers on the device for images and the output vector gray
 	//img1
 	cl_mem img1_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, (IMAGE_SIZE) * sizeof(unsigned char), NULL, &clStatus);
-	cl_mem gray_img1_clmem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	cl_mem gray_img1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 	//img2
 	cl_mem img2_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, (IMAGE_SIZE) * sizeof(unsigned char), NULL, &clStatus);
-	cl_mem gray_img2_clmem = clCreateBuffer(context, CL_MEM_WRITE_ONLY, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	cl_mem gray_img2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 
 
 	/////////////mean_kerel
@@ -552,16 +586,6 @@ int main(void) {
 
 	//////////// Copy buffers to the device memory
 	////gray buffers
-	/*
-	//img1
-	clStatus = clEnqueueWriteBuffer(command_queue, R1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &R_1[0], 0, NULL, NULL);
-	clStatus = clEnqueueWriteBuffer(command_queue, G1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &G_1[0], 0, NULL, NULL);
-	clStatus = clEnqueueWriteBuffer(command_queue, B1_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &B_1[0], 0, NULL, NULL);
-	//img2
-	clStatus = clEnqueueWriteBuffer(command_queue, R2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &R_2[0], 0, NULL, NULL);
-	clStatus = clEnqueueWriteBuffer(command_queue, G2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &G_2[0], 0, NULL, NULL);
-	clStatus = clEnqueueWriteBuffer(command_queue, B2_clmem, CL_TRUE, 0, VECTOR_SIZE * sizeof(unsigned char), &B_2[0], 0, NULL, NULL);
-	*/
 	//img1
 	clStatus = clEnqueueWriteBuffer(command_queue, img1_clmem, CL_TRUE, 0, (IMAGE_SIZE) * sizeof(unsigned char), &img1[0], 0, NULL, NULL);
 	//img2
@@ -587,15 +611,14 @@ int main(void) {
 	cl_program program = clCreateProgramWithSource(context, 1, (const char **)&kernel_string, NULL, &clStatus);
 
 	/////////// Build the program
-	clStatus = clBuildProgram(program, 1, device_list, NULL, NULL, NULL);
+	cout << "Building kernel..." << endl;
+	clStatus = clBuildProgram(program, 1, device_list, "-cl-mad-enable", NULL, NULL);
 	if (clStatus != 0)
 	{
 		return clStatus;
 	}
+	cout << "Kernel build is done" << endl;
 
-	/////////// Create the OpenCL kernel for function gray img1 and img2
-	//cl_kernel gray1_kernel = clCreateKernel(program, "gray", &clStatus);
-	//cl_kernel gray2_kernel = clCreateKernel(program, "gray", &clStatus);
 
 	/////////// Create the OpenCL kernel for function gray img1 and img2
 	cl_kernel gray1_kernel = clCreateKernel(program, "downsample_and_gray", &clStatus);
@@ -612,19 +635,7 @@ int main(void) {
 
 	/////////// Create the OpenCL kernel for function occlusion
 	cl_kernel occlusion_kernel = clCreateKernel(program, "occlusion_fillig", &clStatus);
-	/*
-	/////////// Set the arguments of the kernel for gray
-	//img1
-	clStatus = clSetKernelArg(gray1_kernel, 0, sizeof(cl_mem), (void *)&R1_clmem);
-	clStatus = clSetKernelArg(gray1_kernel, 1, sizeof(cl_mem), (void *)&G1_clmem);
-	clStatus = clSetKernelArg(gray1_kernel, 2, sizeof(cl_mem), (void *)&B1_clmem);
-	clStatus = clSetKernelArg(gray1_kernel, 3, sizeof(cl_mem), (void *)&gray_img1_clmem);
-	//img2
-	clStatus = clSetKernelArg(gray2_kernel, 0, sizeof(cl_mem), (void *)&R2_clmem);
-	clStatus = clSetKernelArg(gray2_kernel, 1, sizeof(cl_mem), (void *)&G2_clmem);
-	clStatus = clSetKernelArg(gray2_kernel, 2, sizeof(cl_mem), (void *)&B2_clmem);
-	clStatus = clSetKernelArg(gray2_kernel, 3, sizeof(cl_mem), (void *)&gray_img2_clmem);
-	*/
+
 	/////////// Set the arguments of the kernel for downsample_gray
 	//img1
 	clStatus = clSetKernelArg(gray1_kernel, 0, sizeof(cl_mem), (void *)&img1_clmem);
@@ -660,22 +671,23 @@ int main(void) {
 
 
 	///////////////////////////////////////////////////////start timer beginning///////////////////////////////////////////////////////
+	cout << "starting the timer now ......" << endl;
 	auto start = chrono::high_resolution_clock::now();/////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	///////////define local and global sizes
 	size_t global_size = IMAGE_SIZE; // Process the entire lists
-	size_t local_size = 441;           // Process one item at a time
+	size_t local_size_1 = 120;           // Process one item at a time
 
 
 	///////////put the gray kernel into the command queue
 	//img1
-	clStatus = clEnqueueNDRangeKernel(command_queue, gray1_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+	clStatus = clEnqueueNDRangeKernel(command_queue, gray1_kernel, 1, NULL, &global_size, &local_size_1, 0, NULL, NULL);
 	//img2
-	clStatus = clEnqueueNDRangeKernel(command_queue, gray2_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+	clStatus = clEnqueueNDRangeKernel(command_queue, gray2_kernel, 1, NULL, &global_size, &local_size_1, 0, NULL, NULL);
 
 	global_size = VECTOR_SIZE; // Process the entire lists
-	local_size = 441;           // Process one item at a time
+	size_t local_size = 441;           // Process one item at a time
 
 	///////////put the zncc kernel into the command queue
 	clStatus = clEnqueueNDRangeKernel(command_queue, mean_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
@@ -705,13 +717,14 @@ int main(void) {
 	///////////////////////////////////////////////////////Stop timer and save image //////////////////////////////////////////////
 	auto finish = chrono::high_resolution_clock::now();
 	chrono::duration<double> elapsed = finish - start;
-	printf("%f \n", elapsed);
+	printf("finished, total execution time: %f \n", elapsed);
+	cout << "saving images ......" << endl;
 	saveImage(occlusion, "occlusion_optimized");
 	//saveImage(gray_img1, "gray1");
 	//saveImage(gray_img2, "gray2");
 	saveImage(disp1, "disp1_optimized");
 	saveImage(disp2, "disp2_optimized");
-
+	cout << "Releasing memory elemnts ......" << endl;
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
