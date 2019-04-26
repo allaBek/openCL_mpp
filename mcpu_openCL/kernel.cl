@@ -207,7 +207,7 @@ __kernel void occlusion_fillig_slow(__global float * delta_disp, __global float 
 
 ////////////////////////////////////////////////// Optimized code //////////////////////////////////////////
 
-__kernel void downsample_and_gray(__global unsigned char * image, __global float * gray) 
+__kernel void downsample_and_gray(__global unsigned char * restrict image, __global float * restrict gray) 
 {
 //Get the index of the work-item
 	int index = get_global_id(0);
@@ -218,14 +218,14 @@ __kernel void downsample_and_gray(__global unsigned char * image, __global float
 	const int current_row = (index - red_position_within_row) / (WIDTH*4);
 	if((current_row & 3) ==0 && (red_position_within_row & 15) == 0)
 	{
-		gray[GRAY_WIDTH*current_row/4 + red_position_within_row/16] = (unsigned char) (0.2126*image[index] + 0.7152*image[index+1] + 0.0722*image[index+2]);
+		gray[GRAY_WIDTH*current_row/4 + red_position_within_row/16] =  (0.2126*image[index] + 0.7152*image[index+1] + 0.0722*image[index+2]);
 	}
 	
 	
 }
 
 //OPT1: create separate kernel for mean calculation
-__kernel void mean(__global float * gray1,__global float * gray2, __global float * mean1, __global float * mean2) 
+__kernel void mean(__global float * restrict gray1,__global float * restrict gray2, __global float * restrict mean1, __global float * restrict mean2) 
 {
 //Get the index of the work-item
 int index = get_global_id(0);
@@ -268,7 +268,7 @@ int index = get_global_id(0);
 
 
 
-__kernel void zncc(__global float * gray1,__global float * gray2, __global float * mean1, __global float * mean2, __global float * disp1, __global float * disp2) 
+__kernel void zncc(__global float * restrict  gray1,__global float * restrict  gray2, __global float * restrict  mean1, __global float * restrict  mean2, __global float * restrict disp1, __global float * restrict disp2) 
 {
 //Get the index of the work-item
 int index = get_global_id(0);
@@ -288,6 +288,7 @@ int index = get_global_id(0);
 	for(int d = 0; d < MAX_DISP; d++)
 	{
 		float map1_sum1 = 0,map1_sum2 = 0,map1_sum3 = 0,map2_sum1 = 0,map2_sum2 = 0,map2_sum3 = 0;
+		#pragma unroll
 		for (int y = current_row - (B - 1) / 2; y <= (current_row + (B - 1) / 2 )&& y < HEIGHT; y++)
 		{
 			
@@ -339,13 +340,13 @@ int index = get_global_id(0);
 		} //for loop of y
 		
 		//sqrt
-		map1_sum2 = rsqrt(map1_sum2);
-		map1_sum3 = rsqrt(map1_sum3);
-		map2_sum2 = rsqrt(map2_sum2);
-		map2_sum3 = rsqrt(map2_sum3);
+		map1_sum2 = sqrt(map1_sum2);
+		map1_sum3 = sqrt(map1_sum3);
+		map2_sum2 = sqrt(map2_sum2);
+		map2_sum3 = sqrt(map2_sum3);
 		//calculate zncc
-		double tmp1 = map1_sum1 * (map1_sum2 * map1_sum3);
-		double tmp2 = map2_sum1 * (map2_sum2 * map2_sum3);
+		double tmp1 = map1_sum1 / (map1_sum2 * map1_sum3);
+		double tmp2 = map2_sum1 / (map2_sum2 * map2_sum3);
 		
 		//pick disparity value in here
 		if(tmp1 >= zncc1)
@@ -369,7 +370,7 @@ int index = get_global_id(0);
 
 
 
-__kernel void cross_checking( __global float * disp1, __global float * disp2,__global float * delta_disp) 
+__kernel void cross_checking( __global  float * restrict disp1, __global float * disp2,__global float * restrict delta_disp) 
 {
 	int index = get_global_id(0);
 	const int DIFF = 38;
@@ -387,7 +388,7 @@ __kernel void cross_checking( __global float * disp1, __global float * disp2,__g
 }
 
 
-__kernel void occlusion_fillig(__global float * delta_disp, __global float * occlusion) 
+__kernel void occlusion_fillig(__global float * restrict delta_disp, __global float * restrict occlusion) 
 {
 	int index = get_global_id(0);
 	const int HEIGHT = 504, WIDTH = 735;

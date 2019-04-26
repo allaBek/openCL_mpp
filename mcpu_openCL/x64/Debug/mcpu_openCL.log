@@ -1,4 +1,5 @@
 ﻿  main.cpp
-c:\users\moham\source\repos\mcpu_opencl\mcpu_opencl\main.cpp(461): warning C4477: 'printf' : format string '%s' requires an argument of type 'char *', but variadic argument 1 has type 'std::string'
-c:\users\moham\source\repos\mcpu_opencl\mcpu_opencl\main.cpp(721): warning C4477: 'printf' : format string '%f' requires an argument of type 'double', but variadic argument 1 has type 'std::chrono::duration<double,std::ratio<1,1>>'
+c:\users\moham\source\repos\mcpu_opencl\mcpu_opencl\main.cpp(460): warning C4477: 'printf' : format string '%s' requires an argument of type 'char *', but variadic argument 1 has type 'std::string'
+c:\users\moham\source\repos\mcpu_opencl\mcpu_opencl\main.cpp(510): warning C4244: 'initializing': conversion from 'cl_ulong' to 'double', possible loss of data
+c:\users\moham\source\repos\mcpu_opencl\mcpu_opencl\main.cpp(741): warning C4477: 'printf' : format string '%f' requires an argument of type 'double', but variadic argument 1 has type 'std::chrono::duration<double,std::ratio<1,1>>'
   mcpu_openCL.vcxproj -> C:\Users\moham\source\repos\mcpu_openCL\x64\Debug\mcpu_openCL.exe

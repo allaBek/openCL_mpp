@@ -216,7 +216,7 @@ int main(void) {
 
 	///////////define local and global sizes
 	size_t global_size = VECTOR_SIZE; // Process the entire lists
-	size_t local_size = 8;           // Process one item at a time
+	size_t local_size = 735;           // Process one item at a time
 
 	//////////////////////////////////////////////////////start timer beginning///////////////////////////////////////////////////////
 	auto start = chrono::high_resolution_clock::now();/////////////////////////////////////////////////////////////////////////////////
@@ -286,7 +286,7 @@ int main(void) {
 
 	///////////define local and global sizes
 	global_size = VECTOR_SIZE; // Process the entire lists
-	local_size = 40;           // Process one item at a time
+	//local_size = 735;           // Process one item at a time
 	//////////////////////////////////////////////////////start timer beginning///////////////////////////////////////////////////////
 	start = chrono::high_resolution_clock::now();/////////////////////////////////////////////////////////////////////////////////
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -340,7 +340,7 @@ int main(void) {
 	
 	///////////define local and global sizes
 	global_size = VECTOR_SIZE; // Process the entire lists
-	local_size = 8;           // Process one item at a time
+	//local_size = 8;           // Process one item at a time
 
 	///////////////////////////////////////////////////////start timer beginning///////////////////////////////////////////////////////
 	start = chrono::high_resolution_clock::now();/////////////////////////////////////////////////////////////////////////////////
@@ -500,6 +500,17 @@ void getAvailableDevicesInfo()
 	}
 
 }
+double getKernelExecutionTime(cl_event event,const char* kernel_name)
+{
+	cl_ulong time_start;
+	cl_ulong time_end;
+
+	clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_START, sizeof(time_start), &time_start, NULL);
+	clGetEventProfilingInfo(event, CL_PROFILING_COMMAND_END, sizeof(time_end), &time_end, NULL);
+	double nanoSeconds = time_end - time_start;
+	printf("OpenCl Execution time of %s is: %0.3f milliseconds \n", kernel_name, nanoSeconds / 1000000.0);
+	return nanoSeconds / 1000000.0;
+}
 
 int main(void) {
 
@@ -551,7 +562,7 @@ int main(void) {
 	
 	// Create a command queue
 	
-	cl_command_queue command_queue = clCreateCommandQueue(context, device_list[0], 0, &clStatus);
+	cl_command_queue command_queue = clCreateCommandQueue(context, device_list[0], CL_QUEUE_PROFILING_ENABLE, &clStatus);
 	char name[50];
 	clGetDeviceInfo(device_list[0], CL_DEVICE_NAME, size(name), name, NULL);
 	cout << "Device name: " << name << endl;
@@ -559,15 +570,15 @@ int main(void) {
 	// Create memory buffers on the device for images and the output vector gray
 	//img1
 	cl_mem img1_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, (IMAGE_SIZE) * sizeof(unsigned char), NULL, &clStatus);
-	cl_mem gray_img1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	cl_mem gray_img1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 	//img2
 	cl_mem img2_clmem = clCreateBuffer(context, CL_MEM_READ_ONLY, (IMAGE_SIZE) * sizeof(unsigned char), NULL, &clStatus);
-	cl_mem gray_img2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	cl_mem gray_img2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 
 
 	/////////////mean_kerel
-	cl_mem mean1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
-	cl_mem mean2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE, VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	cl_mem mean1_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE , VECTOR_SIZE * sizeof(float), NULL, &clStatus);
+	cl_mem mean2_clmem = clCreateBuffer(context, CL_MEM_READ_WRITE , VECTOR_SIZE * sizeof(float), NULL, &clStatus);
 
 
 	/////////////zncc_kerel
@@ -679,27 +690,30 @@ int main(void) {
 	size_t global_size = IMAGE_SIZE; // Process the entire lists
 	size_t local_size_1 = 120;           // Process one item at a time
 
+	//using event for time
+	cl_event event_gray1, event_gray2, event_mean, event_zncc, event_cross_checking, event_occlusion;
+
 
 	///////////put the gray kernel into the command queue
 	//img1
-	clStatus = clEnqueueNDRangeKernel(command_queue, gray1_kernel, 1, NULL, &global_size, &local_size_1, 0, NULL, NULL);
+	clStatus = clEnqueueNDRangeKernel(command_queue, gray1_kernel, 1, NULL, &global_size, &local_size_1, 0, NULL, &event_gray1);
 	//img2
-	clStatus = clEnqueueNDRangeKernel(command_queue, gray2_kernel, 1, NULL, &global_size, &local_size_1, 0, NULL, NULL);
+	clStatus = clEnqueueNDRangeKernel(command_queue, gray2_kernel, 1, NULL, &global_size, &local_size_1, 0, NULL, &event_gray2);
 
 	global_size = VECTOR_SIZE; // Process the entire lists
 	size_t local_size = 441;           // Process one item at a time
 
 	///////////put the zncc kernel into the command queue
-	clStatus = clEnqueueNDRangeKernel(command_queue, mean_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+	clStatus = clEnqueueNDRangeKernel(command_queue, mean_kernel, 1, NULL, &global_size, &local_size, 0, NULL, &event_mean);
 
 	///////////put the zncc kernel into the command queue
-	clStatus = clEnqueueNDRangeKernel(command_queue, zncc_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+	clStatus = clEnqueueNDRangeKernel(command_queue, zncc_kernel, 1, NULL, &global_size, &local_size, 0, NULL, &event_zncc);
 
-	///////////put the zncc kernel into the command queue
-	clStatus = clEnqueueNDRangeKernel(command_queue, cross_checking_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+	///////////put the cross_checking kernel into the command queue
+	clStatus = clEnqueueNDRangeKernel(command_queue, cross_checking_kernel, 1, NULL, &global_size, &local_size, 0, NULL, &event_cross_checking);
 
-	///////////put the zncc kernel into the command queue
-	clStatus = clEnqueueNDRangeKernel(command_queue, occlusion_kernel, 1, NULL, &global_size, &local_size, 0, NULL, NULL);
+	///////////put the occlusion kernel into the command queue
+	clStatus = clEnqueueNDRangeKernel(command_queue, occlusion_kernel, 1, NULL, &global_size, &local_size, 0, NULL, &event_occlusion);
 
 	/////////Read memory from device to local host memory
 
@@ -711,15 +725,34 @@ int main(void) {
 
 
 	/////////// Clean up and wait for all the comands to complete.
+
 	clStatus = clFlush(command_queue);
+	clWaitForEvents(1, &event_gray1);
+	clWaitForEvents(1, &event_gray2);
+	clWaitForEvents(1, &event_mean);
+	clWaitForEvents(1, &event_zncc);
+	clWaitForEvents(1, &event_cross_checking);
+	clWaitForEvents(1, &event_occlusion);
 	clStatus = clFinish(command_queue);
 
 	///////////////////////////////////////////////////////Stop timer and save image //////////////////////////////////////////////
 	auto finish = chrono::high_resolution_clock::now();
 	chrono::duration<double> elapsed = finish - start;
-	printf("finished, total execution time: %f \n", elapsed);
+	printf("finished, total execution time using timer: %f  milliseconds\n", elapsed*1000);
+
+	//testing another timer
+	double gray1_time = getKernelExecutionTime(event_gray1, "gray1");
+	double gray2_time = getKernelExecutionTime(event_gray2, "gray2");
+	double mean_time = getKernelExecutionTime(event_mean, "mean");
+	double zncc_time = getKernelExecutionTime(event_zncc, "zncc");
+	double cross_checking_time = getKernelExecutionTime(event_cross_checking, "cross_checking");
+	double occlusion_time = getKernelExecutionTime(event_occlusion, "occlusion");
+	double total_time = gray1_time + gray2_time + zncc_time + mean_time + cross_checking_time + occlusion_time;
+	cout << "\n Total execution time using openCL event is: " << total_time << "milliseconds"<< endl;
 	cout << "saving images ......" << endl;
+	system("pause");
 	saveImage(occlusion, "occlusion_optimized");
+	
 	//saveImage(gray_img1, "gray1");
 	//saveImage(gray_img2, "gray2");
 	saveImage(disp1, "disp1_optimized");
